@@ -1,18 +1,71 @@
-# -*- mode: ruby -*-
-# vi: set ft=ruby :
+BOX_IMAGE = "centos/7"
+NB_MACHINES = 2
 
 Vagrant.configure("2") do |config|
-  config.vm.box = "centos/7"
+  config.vm.box ="debian/stretch64"
   config.vm.box_check_update = false
   config.vm.provider "virtualbox" do |vb|
-    vb.memory = "512"
+    vb.memory ="384" 
   end
 
-  config.vm.define "websrv" do |web|
-    web.vm.hostname = "websrv"
-    web.vm.network "private_network", ip: "192.168.56.98"
-    web.vm.provision "init", type: "shell", run: "once", inline: <<-EOF
-        sudo yum -y install httpd
-      EOF
+
+
+  # Install avahi on all machines 
+  config.vm.provision "init",type: "shell",  inline: <<-SHELL
+    apt-get update
+    apt-get install -qq apache2
+
+    systemctl start httpd
+    systemctl enable httpd
+    firewall-cmd --zone=public --add-port=http/tcp --permanent
+    firewall-cmd --zone=public --add-port=https/tcp --permanent
+    firewall-cmd --reload 
+    apt-get -qq install libapache2-mod-php7.0 php7.0mbstring
+    useradd -m -s /bin/bash -G www-data wiki
+    mkdir /opt/src
+    cd /opt/src
+    wget https://download.dokuwiki.org/out/dokuwiki-8a269cc015a64b40e4c918699f1e1142.tgz
+    wget -q -o /opt/src/dokuwiki-8a269cc015a64b40e4c918699f1e1142.tgz
+    sudo tar zxf /opt/src/dokuwiki-8a269cc015a64b40e4c918699f1e1142.tgz -C /var/www/html/
+    sudo chown -R wiki:www-data /var/www/html/dokuwiki/
+    sudo chmod -R g+w /var/www/html/dokuwiki/data
+    sudo chmod -R g+w /var/www/html/dokuwiki/conf
+    rm /var/www/html/dokuwiki/install.php
+    mkdir /home/wiki/.ssh
+    ssh-keygen
+    sudo chmod 700 /home/wiki/.ssh
+    sudo chown -R wiki:wiki /home/wiki/.ssh
+    sudo cp /home/vagrant/.ssh/id_rsa /home/wiki/.ssh
+    sudo -s
+    cat /home/vagrant/id_rsa.pub >> /home/wiki/.ssh/authorized_keys
+    chmod 600 /home/wiki/.ssh/*
+    exit
+  SHELL
+  config.vm.define "wiki" do |wik|
+    wik.vm.hostname = "wiki"
+    wik.vm.network "private_network", ip: "192.168.56.12"
+    wik.vm.provision "cron", type: "shell", run: "once", inline: <<-EOF
+      mkdir /home/wiki/.ssh
+      cp /vagrant/id_rsa_wiki / home/wiki/.ssh
+      cat /vagrant/id_rsa_wiki.pub >> /home/wiki/.ssh/authorized_keys
+      chmod 700 /home/wiki/.ssh
+      chmod 600 /home/wiki/.ssh/*
+      chown -R wiki:wiki /home/wiki/.ssh
+    EOF
+  end
+  config.vm.define "back" do |bac|
+    bac.vm.hostname = "backup"
+    bac.vm.network "private_network", ip: "192.168.56.13"
+    bac.vm.provision "cron", type: "shell", run: "once", inline: <<-EOF
+      mkdir /home/wiki/.ssh
+      cp /vagrant/id_rsa_wiki / home/wiki/.ssh
+      cat /vagrant/id_rsa_wiki.pub >> /home/wiki/.ssh/authorized_keys
+      chmod 700 /home/wiki/.ssh
+      chmod 600 /home/wiki/.ssh/*
+      chown -R wiki:wiki /home/wiki/.ssh
+    EOF
+    bac.vm.provision "cron", type: "shell", run: "once", inline: <<-EOF
+      echo nan rien
+    EOF
   end
 end
